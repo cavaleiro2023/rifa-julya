@@ -1,5 +1,2 @@
-import RifaJulya from "../components/rifa-julya";
-
-export default function Home() {
-  return <RifaJulya />;
-}
+"use client";
+export { default } from "../components/rifa-julya";
