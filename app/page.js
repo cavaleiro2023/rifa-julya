@@ -1,5 +1,2 @@
-export const dynamic = "force-dynamic";
-
-export default function Home() {
-  return null;
-}
+"use client";
+export { default } from "../components/rifa-julya";
