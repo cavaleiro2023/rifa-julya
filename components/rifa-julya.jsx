@@ -14,7 +14,7 @@ const TICKET_PRICE     = 20;
 const GOAL_AMOUNT      = 20000;
 const ADMIN_USER       = "admin";
 const ADMIN_PASSWORD   = "@Julya311225";
-const RESERVE_MINUTES  = 10;
+const RESERVE_MINUTES  = 240;
 
 const fmt = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -188,21 +188,17 @@ export default function RifaJulya() {
 
     if (error) { showToast("Erro ao reservar. Tente novamente!", "error"); return; }
 
-    // Abrir WhatsApp
+    // Abrir WhatsApp — usando <a> programatico para funcionar no iOS Safari
     const texto = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
     const msg   = encodeURIComponent(texto);
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid = /Android/i.test(navigator.userAgent);
     const waUrl = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + msg;
-    const waAppUrl = "whatsapp://send?phone=" + WHATSAPP_NUMBER + "&text=" + msg;
-
-    if (isIOS) {
-      window.open(waUrl, "_blank");
-    } else if (isAndroid) {
-      window.location.href = waAppUrl;
-    } else {
-      window.open(waUrl, "_blank");
-    }
+    const link  = document.createElement("a");
+    link.href   = waUrl;
+    link.target = "_blank";
+    link.rel    = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 
     setSelected([]);
     setForm({ nome: "", telefone: "", obs: "" });
