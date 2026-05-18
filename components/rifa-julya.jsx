@@ -9,7 +9,7 @@ const SUPABASE_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhY
 const supabase         = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── Config ──
-const WHATSAPP_NUMBER  = "5599984922332";
+const WHATSAPP_NUMBER  = "5599991371300";
 const TICKET_PRICE     = 20;
 const GOAL_AMOUNT      = 20000;
 const ADMIN_USER       = "admin";
@@ -28,7 +28,7 @@ function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
   const qtd = sorted.length + (sorted.length > 1 ? " numeros" : " numero");
   var lines = [];
-  lines.push("*RIFA BENEFICENTE - JULYA*");
+  lines.push("RIFA BENEFICENTE - JULYA");
   lines.push("Ola! Gostaria de reservar o(s) seguinte(s) numero(s) da rifa:");
   lines.push("");
   lines.push("Nome: " + nome);
@@ -36,9 +36,14 @@ function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   lines.push("Numero(s): " + sorted.join(", "));
   lines.push("Quantidade: " + qtd);
   lines.push("Valor Total: " + totalFmt);
+  lines.push("Chave PIX para pagamento:");
+  lines.push("julyafigueiredo2512@gmail.com");
   if (obs) lines.push("Obs: " + obs);
   lines.push("");
   lines.push("Aguardo a confirmacao da reserva e os dados para pagamento.");
+  lines.push("Apos realizar o pagamento, por favor envie o comprovante.");
+  lines.push("");
+  lines.push("Desde ja, muito obrigada pela ajuda e colaboracao!");
   return lines.join("\n");
 }
 
@@ -186,12 +191,18 @@ export default function RifaJulya() {
     // Abrir WhatsApp
     const texto = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
     const msg   = encodeURIComponent(texto);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const waUrl = isMobile
-      ? "whatsapp://send?phone=" + WHATSAPP_NUMBER + "&text=" + msg
-      : "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + msg;
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const waUrl = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + msg;
+    const waAppUrl = "whatsapp://send?phone=" + WHATSAPP_NUMBER + "&text=" + msg;
 
-    if (isMobile) { window.location.href = waUrl; } else { window.open(waUrl, "_blank"); }
+    if (isIOS) {
+      window.open(waUrl, "_blank");
+    } else if (isAndroid) {
+      window.location.href = waAppUrl;
+    } else {
+      window.open(waUrl, "_blank");
+    }
 
     setSelected([]);
     setForm({ nome: "", telefone: "", obs: "" });
