@@ -14,7 +14,7 @@ const TICKET_PRICE     = 20;
 const GOAL_AMOUNT      = 20000;
 const ADMIN_USER       = "admin";
 const ADMIN_PASSWORD   = "@Julya311225";
-const RESERVE_MINUTES  = 240;
+const RESERVE_MINUTES  = 1440; // 1 dia
 
 const fmt = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -26,41 +26,27 @@ const statusColor = (s) => ({
 
 function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
-  const qtd      = sorted.length + (sorted.length > 1 ? " números" : " número");
-  const fcp      = String.fromCodePoint;
-  const e = {
-    rifa:  fcp(0x1F39F) + "️",
-    heart: fcp(0x1F496),
-    smile: fcp(0x1F60A),
-    user:  fcp(0x1F464),
-    phone: fcp(0x1F4DE),
-    hash:  fcp(0x1F522),
-    money: fcp(0x1F4B0),
-    pix:   fcp(0x1F4F2),
-    check: fcp(0x2705),
-    pray:  fcp(0x1F64F),
-    note:  fcp(0x1F4DD),
-  };
-  const nl      = "\n";
-  const obsLine = obs ? (nl + nl + e.note + " *Obs:* " + obs) : "";
+  const qtd      = sorted.length + (sorted.length > 1 ? " numeros" : " numero");
+  const nl       = "\n";
+  const obsLine  = obs ? (nl + nl + "*Obs:* " + obs) : "";
   return (
-    e.rifa + " *RIFA BENEFICENTE - JULYA* " + e.heart + nl +
+    "*RIFA BENEFICENTE - JULYA*" + nl +
     nl +
-    "Olá! " + e.smile + " Sua reserva foi registrada com os seguintes dados:" + nl +
+    "Ola! Sua reserva foi registrada com os seguintes dados:" + nl +
     nl +
-    e.user  + " *Nome:* "      + nome                + nl +
-    e.phone + " *Telefone:* "  + telefone             + nl +
-    e.rifa  + " *Número(s):* " + sorted.join(", ")  + nl +
-    e.hash  + " *Quantidade:* " + qtd                 + nl +
-    e.money + " *Valor Total:* " + totalFmt           + nl +
+    "*Nome:* "       + nome             + nl +
+    "*Telefone:* "   + telefone          + nl +
+    "*Numero(s):* "  + sorted.join(", ") + nl +
+    "*Quantidade:* " + qtd               + nl +
+    "*Valor Total:* " + totalFmt         + nl +
     nl +
-    e.pix + " *Chave PIX:*" + nl +
+    "*Chave PIX:*" + nl +
     "julyafigueiredo2512@gmail.com" +
     obsLine + nl +
     nl +
-    e.check + " Após o pagamento, envie o comprovante para confirmarmos sua reserva." + nl +
+    "Apos o pagamento, envie o comprovante para confirmarmos sua reserva." + nl +
     nl +
-    "Muito obrigada pela sua colaboração! " + e.pray + e.heart
+    "Muito obrigada pela sua colaboracao!"
   );
 }
 
@@ -102,33 +88,19 @@ function gerarPixPayload(valor) {
 
 function buildWhatsAppPago(nome, telefone, sorted, formaPag) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
-  const qtd      = sorted.length + (sorted.length > 1 ? " números" : " número");
-  const fcp      = String.fromCodePoint;
-  const e = {
-    rifa:  fcp(0x1F39F) + "️",
-    heart: fcp(0x1F496),
-    user:  fcp(0x1F464),
-    phone: fcp(0x1F4DE),
-    hash:  fcp(0x1F522),
-    money: fcp(0x1F4B0),
-    check: fcp(0x2705),
-    pray:  fcp(0x1F64F),
-    star:  fcp(0x2B50),
-    pix:   fcp(0x1F4F2),
-    cash:  fcp(0x1F4B5),
-  };
+  const qtd      = sorted.length + (sorted.length > 1 ? " numeros" : " numero");
   const nl       = "\n";
-  const formaTxt = formaPag === "pix" ? e.pix + " PIX" : e.cash + " Dinheiro";
+  const formaTxt = formaPag === "pix" ? "PIX" : "Dinheiro";
   return (
-    e.check + " *PAGAMENTO CONFIRMADO!* " + e.heart + nl + nl +
-    e.rifa + " *RIFA BENEFICENTE - JULYA* " + nl + nl +
-    e.user  + " *Cliente:* "    + nome             + nl +
-    e.phone + " *Telefone:* "   + telefone          + nl +
-    e.rifa  + " *Número(s):* "  + sorted.join(", ") + nl +
-    e.hash  + " *Quantidade:* " + qtd               + nl +
-    e.money + " *Valor:* "      + totalFmt           + nl +
-    "      " + " *Pagamento:* " + formaTxt           + nl + nl +
-    e.star + " Bilhete(s) confirmado(s)! Muito obrigada pela sua colaboração! " + e.pray + e.heart
+    "*PAGAMENTO CONFIRMADO!*" + nl + nl +
+    "*RIFA BENEFICENTE - JULYA*" + nl + nl +
+    "*Cliente:* "    + nome             + nl +
+    "*Telefone:* "   + telefone          + nl +
+    "*Numero(s):* "  + sorted.join(", ") + nl +
+    "*Quantidade:* " + qtd               + nl +
+    "*Valor:* "      + totalFmt           + nl +
+    "*Pagamento:* "  + formaTxt           + nl + nl +
+    "Bilhete(s) confirmado(s)! Muito obrigada pela sua colaboracao!"
   );
 }
 
@@ -659,23 +631,26 @@ function PaymentModal({ data, onClose, onFinalizar }) {
   const total      = sorted.length * TICKET_PRICE;
   const totalFmt   = "R$ " + total.toFixed(2).replace(".", ",");
   const pixPayload = gerarPixPayload(total);
-  const qrUrl      = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(pixPayload);
+  const qrUrl      = "https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=" + encodeURIComponent(pixPayload);
 
   const copiar = () => {
-    navigator.clipboard.writeText(pixPayload).then(() => {
+    const exec = () => {
+      try {
+        const el = document.createElement("textarea");
+        el.value = pixPayload;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      } catch (_) {}
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    }).catch(() => {
-      // fallback para navegadores sem clipboard API
-      const el = document.createElement("textarea");
-      el.value = pixPayload;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    });
+    };
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(pixPayload).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); }).catch(exec);
+    } else { exec(); }
   };
 
   const finalizar = async (forma) => {
@@ -684,122 +659,109 @@ function PaymentModal({ data, onClose, onFinalizar }) {
     setLoading(false);
   };
 
-  const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
-  const box     = { background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 20, padding: 24, width: "100%", maxWidth: 420, maxHeight: "95vh", overflowY: "auto" };
-
   return (
-    <div style={overlay}>
-      <div style={box}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px 14px" }}>
+      <style>{`@keyframes pulseGreen{0%,100%{box-shadow:0 0 0 0 rgba(22,163,74,.6)}60%{box-shadow:0 0 0 9px rgba(22,163,74,0)}}.btn-pix-confirm{animation:pulseGreen 2.2s ease-in-out infinite}`}</style>
+      <div style={{ background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 20, padding: "18px 20px", width: "100%", maxWidth: 400 }}>
 
-        {/* Cabeçalho */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+        {/* Cabecalho */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div>
-            <h3 style={{ color: "#f9fafb", fontSize: 18, fontWeight: 700 }}>
+            <h3 style={{ color: "#f9fafb", fontSize: 16, fontWeight: 700, margin: 0 }}>
               {step === "escolha" ? "Forma de Pagamento" : step === "pix" ? "Pagar via PIX" : "Pagar em Dinheiro"}
             </h3>
-            <p style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+            <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
               {sorted.length} bilhete{sorted.length > 1 ? "s" : ""} &bull; <span style={{ color: "#f472b6", fontWeight: 700 }}>{totalFmt}</span>
-            </p>
+            </div>
           </div>
-          <button onClick={onClose} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 8, padding: "5px 10px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
-            ✕
-          </button>
+          <button onClick={onClose} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 8, padding: "4px 10px", color: "#94a3b8", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>X</button>
         </div>
 
-        {/* ─── Tela: Escolha ─── */}
+        {/* Tela: Escolha */}
         {step === "escolha" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <button onClick={() => setStep("pix")} style={{ background: "#0d2a1e", border: "2px solid #16a34a", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s" }}
-              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
-              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
-              <div style={{ fontSize: 26, marginBottom: 6 }}>📲</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Pagar via PIX</div>
-              <div style={{ color: "#86efac", fontSize: 13, marginTop: 4 }}>QR Code + copia e cola gerados automaticamente</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button onClick={() => setStep("pix")} style={{ background: "#0d2a1e", border: "2px solid #16a34a", borderRadius: 12, padding: "13px 16px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>📲</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#f9fafb" }}>Pagar via PIX</div>
+                <div style={{ color: "#86efac", fontSize: 12, marginTop: 2 }}>QR Code + copia e cola automaticos</div>
+              </div>
             </button>
-
-            <button onClick={() => setStep("dinheiro")} style={{ background: "#1a1500", border: "2px solid #d97706", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s" }}
-              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
-              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
-              <div style={{ fontSize: 26, marginBottom: 6 }}>💵</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Pagar em Dinheiro</div>
-              <div style={{ color: "#fcd34d", fontSize: 13, marginTop: 4 }}>Pagamento presencial — confirmar recebimento</div>
+            <button onClick={() => setStep("dinheiro")} style={{ background: "#1a1500", border: "2px solid #d97706", borderRadius: 12, padding: "13px 16px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>💵</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#f9fafb" }}>Pagar em Dinheiro</div>
+                <div style={{ color: "#fcd34d", fontSize: 12, marginTop: 2 }}>Pagamento presencial confirmado</div>
+              </div>
             </button>
-
-            <button onClick={() => finalizar("reservar")} disabled={loading} style={{ background: "#1e1e2a", border: "2px solid #2d2d3a", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s", opacity: loading ? .7 : 1 }}
-              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
-              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
-              <div style={{ fontSize: 26, marginBottom: 6 }}>🔖</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Apenas Reservar</div>
-              <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>Pagar depois &bull; Reserva por {RESERVE_MINUTES / 60}h</div>
+            <button onClick={() => finalizar("reservar")} disabled={loading} style={{ background: "#1e1e2a", border: "2px solid #2d2d3a", borderRadius: 12, padding: "13px 16px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", display: "flex", alignItems: "center", gap: 14, opacity: loading ? .7 : 1 }}>
+              <div style={{ fontSize: 26, lineHeight: 1, flexShrink: 0 }}>🔖</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#f9fafb" }}>Apenas Reservar</div>
+                <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 2 }}>Pagar depois &bull; Reserva por 24h</div>
+              </div>
             </button>
           </div>
         )}
 
-        {/* ─── Tela: PIX ─── */}
+        {/* Tela: PIX */}
         {step === "pix" && (
           <div>
-            <div style={{ textAlign: "center", marginBottom: 18 }}>
-              <img src={qrUrl} alt="QR Code PIX" width={220} height={220} style={{ borderRadius: 14, border: "4px solid #16a34a", display: "block", margin: "0 auto" }} />
-              <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>Escaneie com o app do banco</div>
+            <div style={{ textAlign: "center", marginBottom: 10 }}>
+              <img src={qrUrl} alt="QR Code PIX" width={190} height={190} style={{ borderRadius: 12, border: "3px solid #16a34a", display: "block", margin: "0 auto" }} />
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 5 }}>Escaneie com o app do banco</div>
             </div>
-
-            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 12, padding: 14, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 6 }}>Chave PIX (E-mail)</div>
-              <div style={{ fontSize: 14, color: "#f1f5f9", wordBreak: "break-all", fontWeight: 600 }}>julyafigueiredo2512@gmail.com</div>
+            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 3 }}>Chave PIX (E-mail)</div>
+              <div style={{ fontSize: 13, color: "#f1f5f9", fontWeight: 600 }}>julyafigueiredo2512@gmail.com</div>
             </div>
-
-            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 12, padding: 14, marginBottom: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase" }}>Copia e Cola</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#f472b6" }}>{totalFmt}</div>
+            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 10, padding: "9px 12px", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                <div style={{ fontSize: 10, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase" }}>Copia e Cola</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#f472b6" }}>{totalFmt}</div>
               </div>
-              <div style={{ fontSize: 10, color: "#64748b", wordBreak: "break-all", lineHeight: 1.6, marginBottom: 10, background: "#0a1a10", borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
-                {pixPayload}
-              </div>
-              <button onClick={copiar} style={{ background: copied ? "#166534" : "#16a34a", border: "none", borderRadius: 8, padding: "10px 16px", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer", width: "100%", transition: "background .25s" }}>
-                {copied ? "✓ Código Copiado!" : "📋 Copiar Código PIX"}
+              <div style={{ fontSize: 9, color: "#64748b", wordBreak: "break-all", lineHeight: 1.5, marginBottom: 7, background: "#0a1a10", borderRadius: 6, padding: "6px 8px", fontFamily: "monospace" }}>{pixPayload}</div>
+              <button onClick={copiar} style={{ background: copied ? "#166534" : "#16a34a", border: "none", borderRadius: 7, padding: "8px 12px", color: "white", fontWeight: 700, fontSize: 12, cursor: "pointer", width: "100%", transition: "background .25s" }}>
+                {copied ? "Codigo Copiado!" : "Copiar Codigo PIX"}
               </button>
             </div>
-
-            <div style={{ background: "#1a1200", border: "1px solid #78350f", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#fcd34d", textAlign: "center" }}>
-              Após realizar o pagamento, clique em Confirmar abaixo
+            <div style={{ background: "#1a1200", border: "1px solid #78350f", borderRadius: 8, padding: "7px 12px", marginBottom: 10, fontSize: 12, color: "#fcd34d", textAlign: "center" }}>
+              Apos pagar, clique em Confirmar abaixo
             </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "12px 14px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
-                ← Voltar
-              </button>
-              <button onClick={() => finalizar("pix")} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg,#16a34a,#15803d)", border: "none", borderRadius: 12, padding: "12px 16px", color: "white", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
-                {loading ? "Confirmando..." : "✓ Confirmar Pagamento PIX"}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 10, padding: "11px 12px", color: "#94a3b8", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>Voltar</button>
+              <button
+                className="btn-pix-confirm"
+                onClick={() => finalizar("pix")}
+                disabled={loading}
+                style={{ flex: 1, background: "linear-gradient(135deg,#16a34a,#15803d)", border: "none", borderRadius: 10, padding: "11px 14px", color: "white", fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}
+              >
+                {loading ? "Confirmando..." : "Confirmar Pagamento PIX"}
               </button>
             </div>
           </div>
         )}
 
-        {/* ─── Tela: Dinheiro ─── */}
+        {/* Tela: Dinheiro */}
         {step === "dinheiro" && (
           <div>
-            <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 64, marginBottom: 12 }}>💵</div>
-              <div style={{ fontSize: 13, color: "#94a3b8" }}>Valor a receber em mãos</div>
-              <div style={{ fontSize: 36, fontWeight: 700, color: "#f472b6", marginTop: 6 }}>{totalFmt}</div>
+            <div style={{ textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 52 }}>💵</div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Valor a receber em maos</div>
+              <div style={{ fontSize: 32, fontWeight: 700, color: "#f472b6", marginTop: 4 }}>{totalFmt}</div>
             </div>
-
-            <div style={{ background: "#1a1500", border: "1px solid #d97706", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 13, color: "#fcd34d", fontWeight: 600, marginBottom: 8 }}>Resumo da venda:</div>
-              <div style={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.8 }}>
-                <div>👤 {nome}</div>
-                <div>📞 {telefone}</div>
-                <div>🎫 {sorted.length} bilhete{sorted.length > 1 ? "s" : ""}: {sorted.join(", ")}</div>
+            <div style={{ background: "#1a1500", border: "1px solid #d97706", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: "#fcd34d", fontWeight: 600, marginBottom: 8 }}>Resumo da venda:</div>
+              <div style={{ color: "#94a3b8", fontSize: 13, lineHeight: 2 }}>
+                <div>Cliente: <strong style={{ color: "#f1f5f9" }}>{nome}</strong></div>
+                <div>Telefone: <strong style={{ color: "#f1f5f9" }}>{telefone}</strong></div>
+                <div>Bilhetes: <strong style={{ color: "#f472b6" }}>{sorted.join(", ")}</strong></div>
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "12px 14px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
-                ← Voltar
-              </button>
-              <button onClick={() => finalizar("dinheiro")} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg,#d97706,#92400e)", border: "none", borderRadius: 12, padding: "12px 16px", color: "white", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
-                {loading ? "Confirmando..." : "✓ Confirmar Recebimento"}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 10, padding: "11px 12px", color: "#94a3b8", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>Voltar</button>
+              <button onClick={() => finalizar("dinheiro")} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg,#d97706,#92400e)", border: "none", borderRadius: 10, padding: "11px 14px", color: "white", fontWeight: 700, fontSize: 13, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
+                {loading ? "Confirmando..." : "Confirmar Recebimento"}
               </button>
             </div>
           </div>
