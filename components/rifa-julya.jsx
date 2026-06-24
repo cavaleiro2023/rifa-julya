@@ -4,8 +4,8 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── Supabase ──
-const SUPABASE_URL     = "https://bolblsozhxgfganzjzxn.supabase.co";
-const SUPABASE_ANON    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvbGJsc296aHhnZmdhbnpqenhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODQ0NTAsImV4cCI6MjA5NDU2MDQ1MH0.zfbl5nEV4_4_B8HR7Yo_6ptFkTPKCwrOeJQv8QTwYpU";
+const SUPABASE_URL     = process.env.NEXT_PUBLIC_SUPABASE_URL     || "https://umahniullotisfaqyllt.supabase.co";
+const SUPABASE_ANON    = process.env.NEXT_PUBLIC_SUPABASE_ANON    || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVtYWhuaXVsbG90aXNmYXF5bGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyNTA0NzcsImV4cCI6MjA5NzgyNjQ3N30.oMdDgxW_YEVFA_lgufT-Fi1Ed3sytVbKe4MkM9X2-Uw";
 const supabase         = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ── Config ──
