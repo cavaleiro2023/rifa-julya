@@ -90,7 +90,7 @@ export default function RifaJulya() {
       .filter((t) => (t.status === "vendido" || t.status === "reservado") && t.nome_cliente)
       .reduce((acc, t) => {
         const key = t.nome_cliente + "|" + t.telefone;
-        if (!acc[key]) acc[key] = { nome_cliente: t.nome_cliente, telefone: t.telefone, numeros: [], status: t.status, criado_em: t.criado_em };
+        if (!acc[key]) acc[key] = { nome_cliente: t.nome_cliente, telefone: t.telefone, vendedor: t.vendedor || null, numeros: [], status: t.status, criado_em: t.criado_em };
         acc[key].numeros.push(t.numero);
         return acc;
       }, {});
@@ -220,8 +220,9 @@ export default function RifaJulya() {
     loadTickets();
   };
 
-  // ── Admin: alterar status ──
-  const changeStatus = async (num, newStatus, extra = {}) => {
+  // ── Admin: alterar status (aceita numero unico ou array) ──
+  const changeStatus = async (nums, newStatus, extra = {}) => {
+    const lista = Array.isArray(nums) ? nums : [nums];
     const updates = { status: newStatus };
     if (newStatus === "disponivel") {
       updates.nome_cliente = null;
@@ -238,15 +239,15 @@ export default function RifaJulya() {
       if (newStatus === "vendido")   updates.data_pagamento = new Date().toISOString();
     }
 
-    let { error } = await supabase.from("rifa_numeros").update(updates).eq("numero", num);
+    let { error } = await supabase.from("rifa_numeros").update(updates).in("numero", lista);
     if (error) {
-      // fallback: tenta sem vendedor caso coluna ainda nao exista no banco
       const fallback = { ...updates };
       delete fallback.vendedor;
-      const { error: e2 } = await supabase.from("rifa_numeros").update(fallback).eq("numero", num);
+      const { error: e2 } = await supabase.from("rifa_numeros").update(fallback).in("numero", lista);
       if (e2) { showToast("Erro ao atualizar! Verifique o banco.", "error"); return; }
     }
-    showToast("Numero " + num + " -> " + newStatus);
+    const label = lista.length > 1 ? lista.length + " numeros" : "Numero " + lista[0];
+    showToast(label + " -> " + newStatus);
     loadTickets();
   };
 
@@ -258,7 +259,8 @@ export default function RifaJulya() {
       arr = arr.filter((t) =>
         String(t.numero).includes(q) ||
         (t.nome_cliente || "").toLowerCase().includes(q) ||
-        (t.telefone || "").includes(q)
+        (t.telefone || "").includes(q) ||
+        (t.vendedor || "").toLowerCase().includes(q)
       );
     }
     return arr;
@@ -575,36 +577,82 @@ function AdminLogin({ user, setUser, pass, setPass, onLogin, onBack, toast }) {
 function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setFilter, onChangeStatus, onLogout, onRefresh, toast, fmt, progress, goal }) {
   const sc = (s) => ({ disponivel: "#16a34a", reservado: "#d97706", vendido: "#dc2626" }[s] || "#888");
 
-  const [modal, setModal] = useState(null); // { numero, newStatus }
-  const [mForm, setMForm] = useState({ nome: "", telefone: "", vendedor: "" });
+  const [modal, setModal]       = useState(null); // { numeros:[], newStatus }
+  const [mForm, setMForm]       = useState({ nome: "", telefone: "", vendedor: "" });
+  const [selNums, setSelNums]   = useState([]);   // numeros selecionados na tabela
+  const [saving, setSaving]     = useState(false);
 
+  // ── Vendedores e clientes conhecidos ──
   const vendedoresSalvos = useMemo(() => {
     const set = new Set();
     tickets.forEach((t) => { if (t.vendedor) set.add(t.vendedor); });
     return [...set].sort();
   }, [tickets]);
 
-  const abrirModal = (numero, newStatus) => {
-    const ticket = tickets.find((t) => t.numero === numero);
-    setMForm({
-      nome:     ticket?.nome_cliente || "",
-      telefone: ticket?.telefone     || "",
-      vendedor: ticket?.vendedor     || "",
+  const clientesPorTelefone = useMemo(() => {
+    const map = {};
+    tickets.forEach((t) => {
+      if (t.telefone && t.nome_cliente && !map[t.telefone]) {
+        map[t.telefone] = t.nome_cliente;
+      }
     });
-    setModal({ numero, newStatus });
+    return map;
+  }, [tickets]);
+
+  // ── Lookup automático ao digitar telefone ──
+  const handleTelefoneChange = (val) => {
+    const nome = clientesPorTelefone[val] || "";
+    setMForm((f) => ({ ...f, telefone: val, nome: nome || f.nome }));
   };
 
+  // ── Abrir modal (unico ou multiplo) ──
+  const abrirModal = (numeros, newStatus) => {
+    const lista = Array.isArray(numeros) ? numeros : [numeros];
+    const primeiro = tickets.find((t) => t.numero === lista[0]);
+    setMForm({
+      nome:     primeiro?.nome_cliente || "",
+      telefone: primeiro?.telefone     || "",
+      vendedor: primeiro?.vendedor     || "",
+    });
+    setModal({ numeros: lista, newStatus });
+  };
+
+  // ── Confirmar modal ──
   const confirmarModal = async () => {
     if (!mForm.nome.trim())     { alert("Informe o nome do cliente."); return; }
     if (!mForm.telefone.trim()) { alert("Informe o telefone."); return; }
     if (!mForm.vendedor.trim()) { alert("Informe o vendedor."); return; }
-    await onChangeStatus(modal.numero, modal.newStatus, {
+
+    const { numeros, newStatus } = modal;
+
+    // Avisa bilhetes ja vendidos em lote
+    if (newStatus === "vendido" && numeros.length > 1) {
+      const jaVendidos = tickets.filter((t) => numeros.includes(t.numero) && t.status === "vendido").map((t) => t.numero);
+      if (jaVendidos.length > 0) {
+        const continuar = window.confirm(jaVendidos.length + " bilhete(s) ja vendido(s): " + jaVendidos.join(", ") + ". Continuar apenas com os disponiveis?");
+        if (!continuar) return;
+        modal.numeros = numeros.filter((n) => !jaVendidos.includes(n));
+        if (modal.numeros.length === 0) { setModal(null); return; }
+      }
+    }
+
+    setSaving(true);
+    await onChangeStatus(modal.numeros, modal.newStatus, {
       nome_cliente: mForm.nome.trim(),
       telefone:     mForm.telefone.trim(),
       vendedor:     mForm.vendedor.trim(),
     });
+    setSaving(false);
+    setSelNums([]);
     setModal(null);
   };
+
+  // ── Checkboxes ──
+  const visiveis      = tickets.slice(0, 100).map((t) => t.numero);
+  const todosMarcados = visiveis.length > 0 && visiveis.every((n) => selNums.includes(n));
+
+  const toggleSel = (num) => setSelNums((prev) => prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]);
+  const toggleTodos = () => setSelNums(todosMarcados ? [] : visiveis);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a10", color: "#f1f5f9", fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
@@ -615,12 +663,16 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
         input:focus,select:focus{border-color:#f472b6}
         table{width:100%;border-collapse:collapse}
         th{font-size:12px;color:#64748b;font-weight:600;text-align:left;padding:8px 12px;border-bottom:1px solid #2d2d3a;text-transform:uppercase;letter-spacing:.5px}
-        td{padding:10px 12px;font-size:13px;border-bottom:1px solid #1e1e28}
+        td{padding:8px 12px;font-size:13px;border-bottom:1px solid #1e1e28}
         tr:hover td{background:#141420}
+        tr.row-sel td{background:#1a0d1e}
         .spill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
         .admin-btn{border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;transition:filter .15s}
         .admin-btn:hover{filter:brightness(1.15)}
         .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;padding:12px 20px;border-radius:12px;font-weight:600;font-size:14px;white-space:nowrap}
+        input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:#f472b6}
+        .chip-v{background:#f472b622;border:1px solid #f472b6;border-radius:8px;padding:3px 10px;font-size:12px;color:#f472b6;cursor:pointer}
+        .chip-v:hover{background:#f472b644}
       `}</style>
 
       {toast && (
@@ -629,24 +681,46 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
         </div>
       )}
 
-      {/* Modal Vendido / Reservar */}
+      {/* ── Modal ── */}
       {modal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 18, padding: 24, width: "100%", maxWidth: 420 }}>
-            <h3 style={{ color: "#f9fafb", fontSize: 17, fontWeight: 700, marginBottom: 4 }}>
-              {modal.newStatus === "vendido" ? "Marcar como Vendido" : "Reservar"} — #{String(modal.numero).padStart(3,"0")}
-            </h3>
-            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 20 }}>Preencha os dados para registrar.</p>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 18, padding: 24, width: "100%", maxWidth: 440, maxHeight: "90vh", overflowY: "auto" }}>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <h3 style={{ color: "#f9fafb", fontSize: 17, fontWeight: 700, marginBottom: 4 }}>
+              {modal.newStatus === "vendido" ? "Marcar como Vendido" : "Reservar"}
+            </h3>
+            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 6 }}>
+              {modal.numeros.length === 1
+                ? "Bilhete #" + String(modal.numeros[0]).padStart(3,"0")
+                : modal.numeros.length + " bilhetes selecionados: " + [...modal.numeros].sort((a,b)=>a-b).map((n)=>String(n).padStart(3,"0")).join(", ")}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Telefone primeiro para lookup automático */}
+              <div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Telefone *</div>
+                <input
+                  list="telefones-list"
+                  value={mForm.telefone}
+                  onChange={(e) => handleTelefoneChange(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                />
+                <datalist id="telefones-list">
+                  {Object.keys(clientesPorTelefone).map((tel) => <option key={tel} value={tel} label={clientesPorTelefone[tel]} />)}
+                </datalist>
+                {clientesPorTelefone[mForm.telefone] && (
+                  <div style={{ fontSize: 12, color: "#4ade80", marginTop: 5 }}>
+                    ✓ Cliente encontrado: {clientesPorTelefone[mForm.telefone]}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Nome do Cliente *</div>
                 <input value={mForm.nome} onChange={(e) => setMForm({ ...mForm, nome: e.target.value })} placeholder="Nome completo" />
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Telefone *</div>
-                <input value={mForm.telefone} onChange={(e) => setMForm({ ...mForm, telefone: e.target.value })} placeholder="(00) 00000-0000" />
-              </div>
+
               <div>
                 <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Vendedor *</div>
                 <input
@@ -661,11 +735,9 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
                 {vendedoresSalvos.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
                     {vendedoresSalvos.map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => setMForm({ ...mForm, vendedor: v })}
-                        style={{ background: mForm.vendedor === v ? "#f472b622" : "#1e1e2a", border: "1px solid " + (mForm.vendedor === v ? "#f472b6" : "#2d2d3a"), borderRadius: 8, padding: "4px 10px", fontSize: 12, color: mForm.vendedor === v ? "#f472b6" : "#94a3b8", cursor: "pointer" }}
-                      >
+                      <button key={v} className="chip-v"
+                        style={{ background: mForm.vendedor === v ? "#f472b644" : "#f472b622", fontWeight: mForm.vendedor === v ? 700 : 400 }}
+                        onClick={() => setMForm({ ...mForm, vendedor: v })}>
                         {v}
                       </button>
                     ))}
@@ -677,14 +749,12 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
             <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
               <button
                 onClick={confirmarModal}
-                style={{ flex: 1, background: modal.newStatus === "vendido" ? "linear-gradient(135deg,#dc2626,#991b1b)" : "linear-gradient(135deg,#d97706,#92400e)", color: "white", border: "none", borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+                disabled={saving}
+                style={{ flex: 1, background: modal.newStatus === "vendido" ? "linear-gradient(135deg,#dc2626,#991b1b)" : "linear-gradient(135deg,#d97706,#92400e)", color: "white", border: "none", borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? .7 : 1 }}
               >
-                Confirmar {modal.newStatus === "vendido" ? "Venda" : "Reserva"}
+                {saving ? "Salvando..." : "Confirmar " + (modal.newStatus === "vendido" ? "Venda" : "Reserva") + (modal.numeros.length > 1 ? " (" + modal.numeros.length + ")" : "")}
               </button>
-              <button
-                onClick={() => setModal(null)}
-                style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "13px 18px", fontSize: 14, color: "#94a3b8", cursor: "pointer" }}
-              >
+              <button onClick={() => setModal(null)} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "13px 18px", fontSize: 14, color: "#94a3b8", cursor: "pointer" }}>
                 Cancelar
               </button>
             </div>
@@ -700,11 +770,11 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onRefresh} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 10, padding: "8px 14px", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Atualizar</button>
-          <button onClick={onLogout} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 10, padding: "8px 14px", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Sair</button>
+          <button onClick={onLogout}  style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 10, padding: "8px 14px", color: "#94a3b8", fontSize: 13, cursor: "pointer" }}>Sair</button>
         </div>
       </div>
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: 20 }}>
 
         {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 24 }}>
@@ -735,7 +805,7 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
 
         {/* Filtros */}
         <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-          <input placeholder="Buscar numero, nome ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+          <input placeholder="Buscar numero, nome, telefone ou vendedor..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ width: "auto", minWidth: 140 }}>
             <option value="todos">Todos os status</option>
             <option value="disponivel">Disponiveis</option>
@@ -743,6 +813,17 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
             <option value="vendido">Vendidos</option>
           </select>
         </div>
+
+        {/* Barra de acao em lote */}
+        {selNums.length > 0 && (
+          <div style={{ background: "#1a0d2e", border: "1px solid #f472b644", borderRadius: 12, padding: "12px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "#f472b6", fontWeight: 600 }}>{selNums.length} bilhete{selNums.length > 1 ? "s" : ""} selecionado{selNums.length > 1 ? "s" : ""}</span>
+            <button className="admin-btn" style={{ background: "#14532d22", color: "#86efac", border: "1px solid #14532d" }} onClick={() => abrirModal(selNums, "vendido")}>Vender todos</button>
+            <button className="admin-btn" style={{ background: "#78350f22", color: "#fcd34d", border: "1px solid #78350f" }} onClick={() => abrirModal(selNums, "reservado")}>Reservar todos</button>
+            <button className="admin-btn" style={{ background: "#1e293b", color: "#94a3b8", border: "1px solid #2d2d3a" }} onClick={() => { onChangeStatus(selNums, "disponivel"); setSelNums([]); }}>Liberar todos</button>
+            <button style={{ marginLeft: "auto", background: "none", border: "none", color: "#64748b", fontSize: 13, cursor: "pointer" }} onClick={() => setSelNums([])}>Limpar seleção</button>
+          </div>
+        )}
 
         {/* Tabela bilhetes */}
         <div style={{ background: "#13131c", border: "1px solid #2d2d3a", borderRadius: 14, overflow: "hidden", marginBottom: 24 }}>
@@ -753,29 +834,36 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
-                <tr><th>#</th><th>Status</th><th>Cliente</th><th>Telefone</th><th>Vendedor</th><th>Acoes</th></tr>
+                <tr>
+                  <th style={{ width: 36 }}><input type="checkbox" checked={todosMarcados} onChange={toggleTodos} title="Selecionar todos visíveis" /></th>
+                  <th>#</th><th>Status</th><th>Cliente</th><th>Telefone</th><th>Vendedor</th><th>Acoes</th>
+                </tr>
               </thead>
               <tbody>
-                {tickets.slice(0, 100).map((t) => (
-                  <tr key={t.numero}>
-                    <td style={{ fontWeight: 700, color: "#f9fafb" }}>{String(t.numero).padStart(3,"0")}</td>
-                    <td>
-                      <span className="spill" style={{ background: sc(t.status) + "22", color: sc(t.status), border: "1px solid " + sc(t.status) + "44" }}>
-                        {t.status}
-                      </span>
-                    </td>
-                    <td style={{ color: "#94a3b8" }}>{t.nome_cliente || "-"}</td>
-                    <td style={{ color: "#94a3b8" }}>{t.telefone     || "-"}</td>
-                    <td style={{ color: "#f472b6", fontWeight: 600 }}>{t.vendedor || "-"}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {t.status !== "vendido"    && <button className="admin-btn" style={{ background: "#14532d22", color: "#86efac", border: "1px solid #14532d" }} onClick={() => abrirModal(t.numero, "vendido")}>Vendido</button>}
-                        {t.status !== "reservado"  && <button className="admin-btn" style={{ background: "#78350f22", color: "#fcd34d", border: "1px solid #78350f" }} onClick={() => abrirModal(t.numero, "reservado")}>Reservar</button>}
-                        {t.status !== "disponivel" && <button className="admin-btn" style={{ background: "#1e293b",   color: "#94a3b8", border: "1px solid #2d2d3a" }} onClick={() => onChangeStatus(t.numero, "disponivel")}>Liberar</button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {tickets.slice(0, 100).map((t) => {
+                  const sel = selNums.includes(t.numero);
+                  return (
+                    <tr key={t.numero} className={sel ? "row-sel" : ""}>
+                      <td><input type="checkbox" checked={sel} onChange={() => toggleSel(t.numero)} /></td>
+                      <td style={{ fontWeight: 700, color: "#f9fafb" }}>{String(t.numero).padStart(3,"0")}</td>
+                      <td>
+                        <span className="spill" style={{ background: sc(t.status) + "22", color: sc(t.status), border: "1px solid " + sc(t.status) + "44" }}>
+                          {t.status}
+                        </span>
+                      </td>
+                      <td style={{ color: "#94a3b8" }}>{t.nome_cliente || "-"}</td>
+                      <td style={{ color: "#94a3b8" }}>{t.telefone || "-"}</td>
+                      <td style={{ color: "#f472b6", fontWeight: 600 }}>{t.vendedor || "-"}</td>
+                      <td>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {t.status !== "vendido"    && <button className="admin-btn" style={{ background: "#14532d22", color: "#86efac", border: "1px solid #14532d" }} onClick={() => abrirModal(t.numero, "vendido")}>Vendido</button>}
+                          {t.status !== "reservado"  && <button className="admin-btn" style={{ background: "#78350f22", color: "#fcd34d", border: "1px solid #78350f" }} onClick={() => abrirModal(t.numero, "reservado")}>Reservar</button>}
+                          {t.status !== "disponivel" && <button className="admin-btn" style={{ background: "#1e293b",   color: "#94a3b8", border: "1px solid #2d2d3a" }} onClick={() => onChangeStatus(t.numero, "disponivel")}>Liberar</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {tickets.length > 100 && (
@@ -786,7 +874,7 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
           </div>
         </div>
 
-        {/* Ultimas compras */}
+        {/* Compradores */}
         <div style={{ background: "#13131c", border: "1px solid #2d2d3a", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "14px 16px", borderBottom: "1px solid #2d2d3a" }}>
             <h2 style={{ fontSize: 16, fontWeight: 700 }}>Compradores</h2>
@@ -795,13 +883,14 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
             <div style={{ padding: 24, textAlign: "center", color: "#64748b", fontSize: 14 }}>Nenhuma compra registrada ainda.</div>
           ) : (
             <table>
-              <thead><tr><th>Cliente</th><th>Telefone</th><th>Numeros</th><th>Qtd</th><th>Valor</th><th>Status</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Telefone</th><th>Vendedor</th><th>Numeros</th><th>Qtd</th><th>Valor</th><th>Status</th></tr></thead>
               <tbody>
                 {purchases.map((p, i) => (
                   <tr key={i}>
                     <td style={{ fontWeight: 600, color: "#f9fafb" }}>{p.nome_cliente}</td>
                     <td style={{ color: "#94a3b8" }}>{p.telefone}</td>
-                    <td style={{ color: "#94a3b8", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.numeros.sort((a,b)=>a-b).join(", ")}</td>
+                    <td style={{ color: "#f472b6", fontWeight: 600 }}>{p.vendedor || "-"}</td>
+                    <td style={{ color: "#94a3b8", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.numeros.sort((a,b)=>a-b).join(", ")}</td>
                     <td style={{ color: "#94a3b8" }}>{p.numeros.length}</td>
                     <td style={{ fontWeight: 700, color: "#f472b6" }}>R$ {(p.numeros.length * TICKET_PRICE).toFixed(2).replace(".",",")}</td>
                     <td>
