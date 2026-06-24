@@ -76,7 +76,7 @@ export default function RifaJulya() {
     setLoading(true);
     const { data, error } = await supabase
       .from("rifa_numeros")
-      .select("numero,status,nome_cliente,telefone,observacao,vendedor,data_reserva,data_pagamento,criado_em")
+      .select("*")
       .order("numero", { ascending: true });
 
     if (error) { showToast("Erro ao carregar bilhetes!", "error"); setLoading(false); return; }
