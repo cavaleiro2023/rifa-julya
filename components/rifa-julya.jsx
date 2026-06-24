@@ -26,23 +26,22 @@ const statusColor = (s) => ({
 
 function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
-  const qtd = sorted.length + (sorted.length > 1 ? " números" : " número");
-  return `🎟️ *RIFA BENEFICENTE - JULYA* 💖
-
-Olá! 😊 Sua reserva foi registrada com os seguintes dados:
-
-👤 *Nome:* ${nome}
-📞 *Telefone:* ${telefone}
-🎟️ *Número(s):* ${sorted.join(", ")}
-🔢 *Quantidade:* ${qtd}
-💰 *Valor Total:* ${totalFmt}
-
-📲 *Chave PIX:*
-julyafigueiredo2512@gmail.com
-${obs ? `\n📝 *Obs:* ${obs}\n` : ""}
-✅ Após o pagamento, envie o comprovante para confirmarmos sua reserva.
-
-Muito obrigada pela sua colaboração! 🙏💖`;
+  const qtd      = sorted.length + (sorted.length > 1 ? " números" : " número");
+  const e = {
+    rifa:  "\u{1F39F}️",
+    heart: "\u{1F496}",
+    smile: "\u{1F60A}",
+    user:  "\u{1F464}",
+    phone: "\u{1F4DE}",
+    hash:  "\u{1F522}",
+    money: "\u{1F4B0}",
+    pix:   "\u{1F4F2}",
+    check: "✅",
+    pray:  "\u{1F64F}",
+    note:  "\u{1F4DD}",
+  };
+  const obsLine = obs ? `\n${e.note} *Obs:* ${obs}\n` : "";
+  return `${e.rifa} *RIFA BENEFICENTE - JULYA* ${e.heart}\n\nOlá! ${e.smile} Sua reserva foi registrada com os seguintes dados:\n\n${e.user} *Nome:* ${nome}\n${e.phone} *Telefone:* ${telefone}\n${e.rifa} *Número(s):* ${sorted.join(", ")}\n${e.hash} *Quantidade:* ${qtd}\n${e.money} *Valor Total:* ${totalFmt}\n\n${e.pix} *Chave PIX:*\njulyafigueiredo2512@gmail.com${obsLine}\n\n${e.check} Após o pagamento, envie o comprovante para confirmarmos sua reserva.\n\nMuito obrigada pela sua colaboração! ${e.pray}${e.heart}`;
 }
 
 // ══════════════════════════════════════════════
