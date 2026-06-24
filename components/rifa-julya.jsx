@@ -27,21 +27,41 @@ const statusColor = (s) => ({
 function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
   const qtd      = sorted.length + (sorted.length > 1 ? " números" : " número");
+  const fcp      = String.fromCodePoint;
   const e = {
-    rifa:  "\u{1F39F}️",
-    heart: "\u{1F496}",
-    smile: "\u{1F60A}",
-    user:  "\u{1F464}",
-    phone: "\u{1F4DE}",
-    hash:  "\u{1F522}",
-    money: "\u{1F4B0}",
-    pix:   "\u{1F4F2}",
-    check: "✅",
-    pray:  "\u{1F64F}",
-    note:  "\u{1F4DD}",
+    rifa:  fcp(0x1F39F) + "️",
+    heart: fcp(0x1F496),
+    smile: fcp(0x1F60A),
+    user:  fcp(0x1F464),
+    phone: fcp(0x1F4DE),
+    hash:  fcp(0x1F522),
+    money: fcp(0x1F4B0),
+    pix:   fcp(0x1F4F2),
+    check: fcp(0x2705),
+    pray:  fcp(0x1F64F),
+    note:  fcp(0x1F4DD),
   };
-  const obsLine = obs ? `\n${e.note} *Obs:* ${obs}\n` : "";
-  return `${e.rifa} *RIFA BENEFICENTE - JULYA* ${e.heart}\n\nOlá! ${e.smile} Sua reserva foi registrada com os seguintes dados:\n\n${e.user} *Nome:* ${nome}\n${e.phone} *Telefone:* ${telefone}\n${e.rifa} *Número(s):* ${sorted.join(", ")}\n${e.hash} *Quantidade:* ${qtd}\n${e.money} *Valor Total:* ${totalFmt}\n\n${e.pix} *Chave PIX:*\njulyafigueiredo2512@gmail.com${obsLine}\n\n${e.check} Após o pagamento, envie o comprovante para confirmarmos sua reserva.\n\nMuito obrigada pela sua colaboração! ${e.pray}${e.heart}`;
+  const nl      = "\n";
+  const obsLine = obs ? (nl + nl + e.note + " *Obs:* " + obs) : "";
+  return (
+    e.rifa + " *RIFA BENEFICENTE - JULYA* " + e.heart + nl +
+    nl +
+    "Olá! " + e.smile + " Sua reserva foi registrada com os seguintes dados:" + nl +
+    nl +
+    e.user  + " *Nome:* "      + nome                + nl +
+    e.phone + " *Telefone:* "  + telefone             + nl +
+    e.rifa  + " *Número(s):* " + sorted.join(", ")  + nl +
+    e.hash  + " *Quantidade:* " + qtd                 + nl +
+    e.money + " *Valor Total:* " + totalFmt           + nl +
+    nl +
+    e.pix + " *Chave PIX:*" + nl +
+    "julyafigueiredo2512@gmail.com" +
+    obsLine + nl +
+    nl +
+    e.check + " Após o pagamento, envie o comprovante para confirmarmos sua reserva." + nl +
+    nl +
+    "Muito obrigada pela sua colaboração! " + e.pray + e.heart
+  );
 }
 
 // ══════════════════════════════════════════════
