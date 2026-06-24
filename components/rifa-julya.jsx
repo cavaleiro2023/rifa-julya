@@ -56,7 +56,7 @@ export default function RifaJulya() {
   const [selected, setSelected]     = useState([]);
   const [filter, setFilter]         = useState("todos");
   const [search, setSearch]         = useState("");
-  const [form, setForm]             = useState({ nome: "", telefone: "", obs: "" });
+  const [form, setForm]             = useState({ nome: "", telefone: "", obs: "", vendedor: "" });
   const [view, setView]             = useState("home");
   const [adminAuth, setAdminAuth]   = useState(false);
   const [adminUser, setAdminUser]   = useState("");
@@ -127,6 +127,12 @@ export default function RifaJulya() {
     return () => clearInterval(interval);
   }, []);
 
+  const vendedoresSalvos = useMemo(() => {
+    const set = new Set();
+    Object.values(tickets).forEach((t) => { if (t.vendedor) set.add(t.vendedor); });
+    return [...set].sort();
+  }, [tickets]);
+
   const stats = useMemo(() => {
     const arr = Object.values(tickets);
     const vendidos    = arr.filter((t) => t.status === "vendido").length;
@@ -181,12 +187,20 @@ export default function RifaJulya() {
         nome_cliente: form.nome,
         telefone: form.telefone,
         observacao: form.obs || null,
+        vendedor: form.vendedor || null,
         data_reserva: new Date().toISOString(),
       })
       .in("numero", sorted)
       .eq("status", "disponivel");
 
-    if (error) { showToast("Erro ao reservar. Tente novamente!", "error"); return; }
+    if (error) {
+      // tenta sem vendedor se coluna ainda nao existe
+      const { error: e2 } = await supabase
+        .from("rifa_numeros")
+        .update({ status: "reservado", nome_cliente: form.nome, telefone: form.telefone, observacao: form.obs || null, data_reserva: new Date().toISOString() })
+        .in("numero", sorted).eq("status", "disponivel");
+      if (e2) { showToast("Erro ao reservar. Tente novamente!", "error"); return; }
+    }
 
     // Abrir WhatsApp — usando <a> programatico para funcionar no iOS Safari
     const texto = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
@@ -201,7 +215,7 @@ export default function RifaJulya() {
     document.body.removeChild(link);
 
     setSelected([]);
-    setForm({ nome: "", telefone: "", obs: "" });
+    setForm({ nome: "", telefone: "", obs: "", vendedor: "" });
     showToast(sorted.length + (sorted.length > 1 ? " numeros reservados" : " numero reservado") + "! WhatsApp aberto.");
     loadTickets();
   };
@@ -224,8 +238,14 @@ export default function RifaJulya() {
       if (newStatus === "vendido")   updates.data_pagamento = new Date().toISOString();
     }
 
-    const { error } = await supabase.from("rifa_numeros").update(updates).eq("numero", num);
-    if (error) { showToast("Erro ao atualizar!", "error"); return; }
+    let { error } = await supabase.from("rifa_numeros").update(updates).eq("numero", num);
+    if (error) {
+      // fallback: tenta sem vendedor caso coluna ainda nao exista no banco
+      const fallback = { ...updates };
+      delete fallback.vendedor;
+      const { error: e2 } = await supabase.from("rifa_numeros").update(fallback).eq("numero", num);
+      if (e2) { showToast("Erro ao atualizar! Verifique o banco.", "error"); return; }
+    }
     showToast("Numero " + num + " -> " + newStatus);
     loadTickets();
   };
@@ -418,6 +438,31 @@ export default function RifaJulya() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <input placeholder="Nome completo *"       value={form.nome}     onChange={(e) => setForm({ ...form, nome: e.target.value })} />
             <input placeholder="Telefone (WhatsApp) *" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
+            <div>
+              <input
+                list="vendedores-home-list"
+                placeholder="Vendedor (opcional)"
+                value={form.vendedor}
+                onChange={(e) => setForm({ ...form, vendedor: e.target.value })}
+              />
+              <datalist id="vendedores-home-list">
+                {vendedoresSalvos.map((v) => <option key={v} value={v} />)}
+              </datalist>
+              {vendedoresSalvos.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {vendedoresSalvos.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setForm({ ...form, vendedor: v })}
+                      style={{ background: form.vendedor === v ? "#f472b622" : "#1e1e2a", border: "1px solid " + (form.vendedor === v ? "#f472b6" : "#2d2d3a"), borderRadius: 8, padding: "4px 10px", fontSize: 12, color: form.vendedor === v ? "#f472b6" : "#94a3b8", cursor: "pointer" }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <textarea placeholder="Observacao (opcional)" value={form.obs} onChange={(e) => setForm({ ...form, obs: e.target.value })} rows={2} style={{ resize: "none" }} />
           </div>
 
