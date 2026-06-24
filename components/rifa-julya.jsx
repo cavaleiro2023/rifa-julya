@@ -27,26 +27,22 @@ const statusColor = (s) => ({
 function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
   const qtd = sorted.length + (sorted.length > 1 ? " números" : " número");
-  var lines = [];
-  lines.push("🎟️ *RIFA BENEFICENTE - JULYA* 💖");
-  lines.push("");
-  lines.push("Olá! 😊 Sua reserva foi registrada com os seguintes dados:");
-  lines.push("");
-  lines.push("👤 *Nome:* " + nome);
-  lines.push("📞 *Telefone:* " + telefone);
-  lines.push("🎟️ *Número(s):* " + sorted.join(", "));
-  lines.push("🔢 *Quantidade:* " + qtd);
-  lines.push("💰 *Valor Total:* " + totalFmt);
-  lines.push("");
-  lines.push("📲 *Chave PIX:*");
-  lines.push("`julyafigueiredo2512@gmail.com`");
-  if (obs) lines.push("");
-  if (obs) lines.push("📝 *Obs:* " + obs);
-  lines.push("");
-  lines.push("✅ Após o pagamento, envie o comprovante para confirmarmos sua reserva.");
-  lines.push("");
-  lines.push("Muito obrigada pela sua colaboração! 🙏💖");
-  return lines.join("\n");
+  return `🎟️ *RIFA BENEFICENTE - JULYA* 💖
+
+Olá! 😊 Sua reserva foi registrada com os seguintes dados:
+
+👤 *Nome:* ${nome}
+📞 *Telefone:* ${telefone}
+🎟️ *Número(s):* ${sorted.join(", ")}
+🔢 *Quantidade:* ${qtd}
+💰 *Valor Total:* ${totalFmt}
+
+📲 *Chave PIX:*
+julyafigueiredo2512@gmail.com
+${obs ? `\n📝 *Obs:* ${obs}\n` : ""}
+✅ Após o pagamento, envie o comprovante para confirmarmos sua reserva.
+
+Muito obrigada pela sua colaboração! 🙏💖`;
 }
 
 // ══════════════════════════════════════════════
@@ -204,14 +200,13 @@ export default function RifaJulya() {
       if (e2) { showToast("Erro ao reservar. Tente novamente!", "error"); return; }
     }
 
-    // Abrir WhatsApp — usando <a> programatico para funcionar no iOS Safari
-    const texto = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
-    const msg   = encodeURIComponent(texto);
-    const waUrl = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + msg;
-    const link  = document.createElement("a");
-    link.href   = waUrl;
-    link.target = "_blank";
-    link.rel    = "noopener noreferrer";
+    // Abrir WhatsApp — encodeURIComponent garante UTF-8 com emojis e acentos
+    const mensagem = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
+    const waUrl    = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(mensagem)}`;
+    const link     = document.createElement("a");
+    link.href      = waUrl;
+    link.target    = "_blank";
+    link.rel       = "noopener noreferrer";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
