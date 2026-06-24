@@ -76,7 +76,7 @@ export default function RifaJulya() {
     setLoading(true);
     const { data, error } = await supabase
       .from("rifa_numeros")
-      .select("*")
+      .select("numero,status,nome_cliente,telefone,observacao,vendedor,data_reserva,data_pagamento,criado_em")
       .order("numero", { ascending: true });
 
     if (error) { showToast("Erro ao carregar bilhetes!", "error"); setLoading(false); return; }
@@ -207,16 +207,22 @@ export default function RifaJulya() {
   };
 
   // ── Admin: alterar status ──
-  const changeStatus = async (num, newStatus) => {
+  const changeStatus = async (num, newStatus, extra = {}) => {
     const updates = { status: newStatus };
     if (newStatus === "disponivel") {
       updates.nome_cliente = null;
       updates.telefone = null;
       updates.observacao = null;
+      updates.vendedor = null;
       updates.data_reserva = null;
       updates.data_pagamento = null;
+    } else {
+      if (extra.nome_cliente) updates.nome_cliente = extra.nome_cliente;
+      if (extra.telefone)     updates.telefone     = extra.telefone;
+      if (extra.vendedor)     updates.vendedor     = extra.vendedor;
+      if (newStatus === "reservado") updates.data_reserva   = new Date().toISOString();
+      if (newStatus === "vendido")   updates.data_pagamento = new Date().toISOString();
     }
-    if (newStatus === "vendido") updates.data_pagamento = new Date().toISOString();
 
     const { error } = await supabase.from("rifa_numeros").update(updates).eq("numero", num);
     if (error) { showToast("Erro ao atualizar!", "error"); return; }
@@ -524,6 +530,37 @@ function AdminLogin({ user, setUser, pass, setPass, onLogin, onBack, toast }) {
 function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setFilter, onChangeStatus, onLogout, onRefresh, toast, fmt, progress, goal }) {
   const sc = (s) => ({ disponivel: "#16a34a", reservado: "#d97706", vendido: "#dc2626" }[s] || "#888");
 
+  const [modal, setModal] = useState(null); // { numero, newStatus }
+  const [mForm, setMForm] = useState({ nome: "", telefone: "", vendedor: "" });
+
+  const vendedoresSalvos = useMemo(() => {
+    const set = new Set();
+    tickets.forEach((t) => { if (t.vendedor) set.add(t.vendedor); });
+    return [...set].sort();
+  }, [tickets]);
+
+  const abrirModal = (numero, newStatus) => {
+    const ticket = tickets.find((t) => t.numero === numero);
+    setMForm({
+      nome:     ticket?.nome_cliente || "",
+      telefone: ticket?.telefone     || "",
+      vendedor: ticket?.vendedor     || "",
+    });
+    setModal({ numero, newStatus });
+  };
+
+  const confirmarModal = async () => {
+    if (!mForm.nome.trim())     { alert("Informe o nome do cliente."); return; }
+    if (!mForm.telefone.trim()) { alert("Informe o telefone."); return; }
+    if (!mForm.vendedor.trim()) { alert("Informe o vendedor."); return; }
+    await onChangeStatus(modal.numero, modal.newStatus, {
+      nome_cliente: mForm.nome.trim(),
+      telefone:     mForm.telefone.trim(),
+      vendedor:     mForm.vendedor.trim(),
+    });
+    setModal(null);
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a10", color: "#f1f5f9", fontFamily: "'DM Sans','Segoe UI',sans-serif" }}>
       <style>{`
@@ -544,6 +581,69 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
       {toast && (
         <div className="toast" style={{ background: toast.type === "error" ? "#7f1d1d" : "#14532d", color: toast.type === "error" ? "#fca5a5" : "#86efac" }}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* Modal Vendido / Reservar */}
+      {modal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 18, padding: 24, width: "100%", maxWidth: 420 }}>
+            <h3 style={{ color: "#f9fafb", fontSize: 17, fontWeight: 700, marginBottom: 4 }}>
+              {modal.newStatus === "vendido" ? "Marcar como Vendido" : "Reservar"} — #{String(modal.numero).padStart(3,"0")}
+            </h3>
+            <p style={{ color: "#64748b", fontSize: 13, marginBottom: 20 }}>Preencha os dados para registrar.</p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Nome do Cliente *</div>
+                <input value={mForm.nome} onChange={(e) => setMForm({ ...mForm, nome: e.target.value })} placeholder="Nome completo" />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Telefone *</div>
+                <input value={mForm.telefone} onChange={(e) => setMForm({ ...mForm, telefone: e.target.value })} placeholder="(00) 00000-0000" />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 5 }}>Vendedor *</div>
+                <input
+                  list="vendedores-list"
+                  value={mForm.vendedor}
+                  onChange={(e) => setMForm({ ...mForm, vendedor: e.target.value })}
+                  placeholder="Digite ou selecione um vendedor"
+                />
+                <datalist id="vendedores-list">
+                  {vendedoresSalvos.map((v) => <option key={v} value={v} />)}
+                </datalist>
+                {vendedoresSalvos.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                    {vendedoresSalvos.map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setMForm({ ...mForm, vendedor: v })}
+                        style={{ background: mForm.vendedor === v ? "#f472b622" : "#1e1e2a", border: "1px solid " + (mForm.vendedor === v ? "#f472b6" : "#2d2d3a"), borderRadius: 8, padding: "4px 10px", fontSize: 12, color: mForm.vendedor === v ? "#f472b6" : "#94a3b8", cursor: "pointer" }}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button
+                onClick={confirmarModal}
+                style={{ flex: 1, background: modal.newStatus === "vendido" ? "linear-gradient(135deg,#dc2626,#991b1b)" : "linear-gradient(135deg,#d97706,#92400e)", color: "white", border: "none", borderRadius: 12, padding: "13px 0", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+              >
+                Confirmar {modal.newStatus === "vendido" ? "Venda" : "Reserva"}
+              </button>
+              <button
+                onClick={() => setModal(null)}
+                style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "13px 18px", fontSize: 14, color: "#94a3b8", cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -608,7 +708,7 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
           <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
-                <tr><th>#</th><th>Status</th><th>Cliente</th><th>Telefone</th><th>Acoes</th></tr>
+                <tr><th>#</th><th>Status</th><th>Cliente</th><th>Telefone</th><th>Vendedor</th><th>Acoes</th></tr>
               </thead>
               <tbody>
                 {tickets.slice(0, 100).map((t) => (
@@ -621,10 +721,11 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
                     </td>
                     <td style={{ color: "#94a3b8" }}>{t.nome_cliente || "-"}</td>
                     <td style={{ color: "#94a3b8" }}>{t.telefone     || "-"}</td>
+                    <td style={{ color: "#f472b6", fontWeight: 600 }}>{t.vendedor || "-"}</td>
                     <td>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        {t.status !== "vendido"    && <button className="admin-btn" style={{ background: "#14532d22", color: "#86efac", border: "1px solid #14532d" }} onClick={() => onChangeStatus(t.numero, "vendido")}>Vendido</button>}
-                        {t.status !== "reservado"  && <button className="admin-btn" style={{ background: "#78350f22", color: "#fcd34d", border: "1px solid #78350f" }} onClick={() => onChangeStatus(t.numero, "reservado")}>Reservar</button>}
+                        {t.status !== "vendido"    && <button className="admin-btn" style={{ background: "#14532d22", color: "#86efac", border: "1px solid #14532d" }} onClick={() => abrirModal(t.numero, "vendido")}>Vendido</button>}
+                        {t.status !== "reservado"  && <button className="admin-btn" style={{ background: "#78350f22", color: "#fcd34d", border: "1px solid #78350f" }} onClick={() => abrirModal(t.numero, "reservado")}>Reservar</button>}
                         {t.status !== "disponivel" && <button className="admin-btn" style={{ background: "#1e293b",   color: "#94a3b8", border: "1px solid #2d2d3a" }} onClick={() => onChangeStatus(t.numero, "disponivel")}>Liberar</button>}
                       </div>
                     </td>
