@@ -64,6 +64,74 @@ function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   );
 }
 
+// ── Gera payload PIX (EMV/BR.GOV.BCB.PIX) para copia-e-cola / QR Code ──
+function gerarPixPayload(valor) {
+  const chave  = "julyafigueiredo2512@gmail.com";
+  const nome   = "Julya Figueiredo";
+  const cidade = "Imperatriz";
+
+  const f = (id, v) => {
+    const s = String(v);
+    return id + String(s.length).padStart(2, "0") + s;
+  };
+
+  const merchantAccount = f("00", "BR.GOV.BCB.PIX") + f("01", chave);
+  const adicionalData   = f("05", "***");
+
+  let payload =
+    f("00", "01") +
+    f("26", merchantAccount) +
+    f("52", "0000") +
+    f("53", "986") +
+    f("54", valor.toFixed(2)) +
+    f("58", "BR") +
+    f("59", nome.slice(0, 25)) +
+    f("60", cidade.slice(0, 15)) +
+    f("62", adicionalData) +
+    "6304";
+
+  let crc = 0xFFFF;
+  for (const ch of payload) {
+    crc ^= ch.charCodeAt(0) << 8;
+    for (let i = 0; i < 8; i++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+  }
+  return payload + crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+function buildWhatsAppPago(nome, telefone, sorted, formaPag) {
+  const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
+  const qtd      = sorted.length + (sorted.length > 1 ? " números" : " número");
+  const fcp      = String.fromCodePoint;
+  const e = {
+    rifa:  fcp(0x1F39F) + "️",
+    heart: fcp(0x1F496),
+    user:  fcp(0x1F464),
+    phone: fcp(0x1F4DE),
+    hash:  fcp(0x1F522),
+    money: fcp(0x1F4B0),
+    check: fcp(0x2705),
+    pray:  fcp(0x1F64F),
+    star:  fcp(0x2B50),
+    pix:   fcp(0x1F4F2),
+    cash:  fcp(0x1F4B5),
+  };
+  const nl       = "\n";
+  const formaTxt = formaPag === "pix" ? e.pix + " PIX" : e.cash + " Dinheiro";
+  return (
+    e.check + " *PAGAMENTO CONFIRMADO!* " + e.heart + nl + nl +
+    e.rifa + " *RIFA BENEFICENTE - JULYA* " + nl + nl +
+    e.user  + " *Cliente:* "    + nome             + nl +
+    e.phone + " *Telefone:* "   + telefone          + nl +
+    e.rifa  + " *Número(s):* "  + sorted.join(", ") + nl +
+    e.hash  + " *Quantidade:* " + qtd               + nl +
+    e.money + " *Valor:* "      + totalFmt           + nl +
+    "      " + " *Pagamento:* " + formaTxt           + nl + nl +
+    e.star + " Bilhete(s) confirmado(s)! Muito obrigada pela sua colaboração! " + e.pray + e.heart
+  );
+}
+
 // ══════════════════════════════════════════════
 //  MAIN APP
 // ══════════════════════════════════════════════
@@ -82,6 +150,7 @@ export default function RifaJulya() {
   const [adminFilter, setAdminFilter] = useState("todos");
   const [purchases, setPurchases]   = useState([]);
   const [toast, setToast]           = useState(null);
+  const [payModal, setPayModal]     = useState(null); // { sorted, nome, telefone, obs }
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -219,20 +288,50 @@ export default function RifaJulya() {
       if (e2) { showToast("Erro ao reservar. Tente novamente!", "error"); return; }
     }
 
-    // Abrir WhatsApp — encodeURIComponent garante UTF-8 com emojis e acentos
-    const mensagem = buildWhatsAppMsg(form.nome, form.telefone, sorted, form.obs);
-    const waUrl    = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(mensagem)}`;
-    const link     = document.createElement("a");
-    link.href      = waUrl;
-    link.target    = "_blank";
-    link.rel       = "noopener noreferrer";
+    showToast("Bilhetes reservados! Escolha a forma de pagamento.");
+    loadTickets();
+    setPayModal({ sorted, nome: form.nome, telefone: form.telefone, obs: form.obs });
+  };
+
+  const abrirWhatsApp = (msg) => {
+    const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+    const link  = document.createElement("a");
+    link.href   = waUrl;
+    link.target = "_blank";
+    link.rel    = "noopener noreferrer";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
 
+  const handleFinalizarPagamento = async (forma) => {
+    const { sorted, nome, telefone, obs } = payModal;
+
+    if (forma === "reservar") {
+      abrirWhatsApp(buildWhatsAppMsg(nome, telefone, sorted, obs));
+      setPayModal(null);
+      setSelected([]);
+      setForm({ nome: "", telefone: "", obs: "", vendedor: "" });
+      showToast(sorted.length + " numero(s) reservado(s)! WhatsApp aberto.");
+      return;
+    }
+
+    // PIX ou Dinheiro → marcar como vendido
+    const updates = { status: "vendido", forma_pagamento: forma, data_pagamento: new Date().toISOString() };
+    let { error } = await supabase.from("rifa_numeros").update(updates).in("numero", sorted);
+    if (error) {
+      // fallback sem forma_pagamento se coluna não existir ainda
+      const { error: e2 } = await supabase.from("rifa_numeros")
+        .update({ status: "vendido", data_pagamento: new Date().toISOString() })
+        .in("numero", sorted);
+      if (e2) { showToast("Erro ao confirmar pagamento!", "error"); return; }
+    }
+
+    abrirWhatsApp(buildWhatsAppPago(nome, telefone, sorted, forma));
+    setPayModal(null);
     setSelected([]);
     setForm({ nome: "", telefone: "", obs: "", vendedor: "" });
-    showToast(sorted.length + (sorted.length > 1 ? " numeros reservados" : " numero reservado") + "! WhatsApp aberto.");
+    showToast("Pagamento confirmado via " + (forma === "pix" ? "PIX" : "Dinheiro") + "! WhatsApp aberto.");
     loadTickets();
   };
 
@@ -248,9 +347,10 @@ export default function RifaJulya() {
       updates.data_reserva = null;
       updates.data_pagamento = null;
     } else {
-      if (extra.nome_cliente) updates.nome_cliente = extra.nome_cliente;
-      if (extra.telefone)     updates.telefone     = extra.telefone;
-      if (extra.vendedor)     updates.vendedor     = extra.vendedor;
+      if (extra.nome_cliente)    updates.nome_cliente    = extra.nome_cliente;
+      if (extra.telefone)        updates.telefone        = extra.telefone;
+      if (extra.vendedor)        updates.vendedor        = extra.vendedor;
+      if (extra.forma_pagamento) updates.forma_pagamento = extra.forma_pagamento;
       if (newStatus === "reservado") updates.data_reserva   = new Date().toISOString();
       if (newStatus === "vendido")   updates.data_pagamento = new Date().toISOString();
     }
@@ -502,10 +602,10 @@ export default function RifaJulya() {
           )}
 
           <button className="buy-btn" style={{ marginTop: 16 }} onClick={handleComprar}>
-            Comprar via WhatsApp
+            Continuar para Pagamento
           </button>
           <p style={{ fontSize: 12, color: "#64748b", textAlign: "center", marginTop: 10 }}>
-            Apos clicar, voce sera redirecionado ao WhatsApp para confirmar.
+            Escolha PIX, Dinheiro ou Reservar apos clicar.
           </p>
         </div>
 
@@ -524,6 +624,9 @@ export default function RifaJulya() {
         Comprar Agora
       </button>
 
+      {/* Modal de pagamento */}
+      <PaymentModal data={payModal} onClose={() => setPayModal(null)} onFinalizar={handleFinalizarPagamento} />
+
       {/* Barra inferior quando ha selecao */}
       {selected.length > 0 && (
         <div className="summary-bar">
@@ -533,11 +636,176 @@ export default function RifaJulya() {
               <div style={{ fontSize: 20, fontWeight: 700, color: "#f472b6" }}>{fmt(selected.length * TICKET_PRICE)}</div>
             </div>
             <button className="buy-btn" style={{ width: "auto", padding: "12px 24px", fontSize: 15 }} onClick={handleComprar}>
-              Comprar Agora
+              Pagar Agora
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════
+//  PAYMENT MODAL
+// ══════════════════════════════════════════════
+function PaymentModal({ data, onClose, onFinalizar }) {
+  const [step, setStep]   = useState("escolha"); // "escolha" | "pix" | "dinheiro"
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  if (!data) return null;
+
+  const { sorted, nome, telefone } = data;
+  const total      = sorted.length * TICKET_PRICE;
+  const totalFmt   = "R$ " + total.toFixed(2).replace(".", ",");
+  const pixPayload = gerarPixPayload(total);
+  const qrUrl      = "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" + encodeURIComponent(pixPayload);
+
+  const copiar = () => {
+    navigator.clipboard.writeText(pixPayload).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }).catch(() => {
+      // fallback para navegadores sem clipboard API
+      const el = document.createElement("textarea");
+      el.value = pixPayload;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  const finalizar = async (forma) => {
+    setLoading(true);
+    await onFinalizar(forma);
+    setLoading(false);
+  };
+
+  const overlay = { position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+  const box     = { background: "#17171f", border: "1px solid #2d2d3a", borderRadius: 20, padding: 24, width: "100%", maxWidth: 420, maxHeight: "95vh", overflowY: "auto" };
+
+  return (
+    <div style={overlay}>
+      <div style={box}>
+
+        {/* Cabeçalho */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+          <div>
+            <h3 style={{ color: "#f9fafb", fontSize: 18, fontWeight: 700 }}>
+              {step === "escolha" ? "Forma de Pagamento" : step === "pix" ? "Pagar via PIX" : "Pagar em Dinheiro"}
+            </h3>
+            <p style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+              {sorted.length} bilhete{sorted.length > 1 ? "s" : ""} &bull; <span style={{ color: "#f472b6", fontWeight: 700 }}>{totalFmt}</span>
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 8, padding: "5px 10px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
+            ✕
+          </button>
+        </div>
+
+        {/* ─── Tela: Escolha ─── */}
+        {step === "escolha" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <button onClick={() => setStep("pix")} style={{ background: "#0d2a1e", border: "2px solid #16a34a", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s" }}
+              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
+              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
+              <div style={{ fontSize: 26, marginBottom: 6 }}>📲</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Pagar via PIX</div>
+              <div style={{ color: "#86efac", fontSize: 13, marginTop: 4 }}>QR Code + copia e cola gerados automaticamente</div>
+            </button>
+
+            <button onClick={() => setStep("dinheiro")} style={{ background: "#1a1500", border: "2px solid #d97706", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s" }}
+              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.15)"}
+              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
+              <div style={{ fontSize: 26, marginBottom: 6 }}>💵</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Pagar em Dinheiro</div>
+              <div style={{ color: "#fcd34d", fontSize: 13, marginTop: 4 }}>Pagamento presencial — confirmar recebimento</div>
+            </button>
+
+            <button onClick={() => finalizar("reservar")} disabled={loading} style={{ background: "#1e1e2a", border: "2px solid #2d2d3a", borderRadius: 14, padding: "18px 20px", textAlign: "left", cursor: "pointer", color: "#f1f5f9", transition: "filter .15s", opacity: loading ? .7 : 1 }}
+              onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.filter = "none"}>
+              <div style={{ fontSize: 26, marginBottom: 6 }}>🔖</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "#f9fafb" }}>Apenas Reservar</div>
+              <div style={{ color: "#94a3b8", fontSize: 13, marginTop: 4 }}>Pagar depois &bull; Reserva por {RESERVE_MINUTES / 60}h</div>
+            </button>
+          </div>
+        )}
+
+        {/* ─── Tela: PIX ─── */}
+        {step === "pix" && (
+          <div>
+            <div style={{ textAlign: "center", marginBottom: 18 }}>
+              <img src={qrUrl} alt="QR Code PIX" width={220} height={220} style={{ borderRadius: 14, border: "4px solid #16a34a", display: "block", margin: "0 auto" }} />
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>Escaneie com o app do banco</div>
+            </div>
+
+            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 6 }}>Chave PIX (E-mail)</div>
+              <div style={{ fontSize: 14, color: "#f1f5f9", wordBreak: "break-all", fontWeight: 600 }}>julyafigueiredo2512@gmail.com</div>
+            </div>
+
+            <div style={{ background: "#0d2a1e", border: "1px solid #16a34a44", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, color: "#86efac", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase" }}>Copia e Cola</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#f472b6" }}>{totalFmt}</div>
+              </div>
+              <div style={{ fontSize: 10, color: "#64748b", wordBreak: "break-all", lineHeight: 1.6, marginBottom: 10, background: "#0a1a10", borderRadius: 8, padding: "8px 10px", fontFamily: "monospace" }}>
+                {pixPayload}
+              </div>
+              <button onClick={copiar} style={{ background: copied ? "#166534" : "#16a34a", border: "none", borderRadius: 8, padding: "10px 16px", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer", width: "100%", transition: "background .25s" }}>
+                {copied ? "✓ Código Copiado!" : "📋 Copiar Código PIX"}
+              </button>
+            </div>
+
+            <div style={{ background: "#1a1200", border: "1px solid #78350f", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#fcd34d", textAlign: "center" }}>
+              Após realizar o pagamento, clique em Confirmar abaixo
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "12px 14px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
+                ← Voltar
+              </button>
+              <button onClick={() => finalizar("pix")} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg,#16a34a,#15803d)", border: "none", borderRadius: 12, padding: "12px 16px", color: "white", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
+                {loading ? "Confirmando..." : "✓ Confirmar Pagamento PIX"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Tela: Dinheiro ─── */}
+        {step === "dinheiro" && (
+          <div>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 64, marginBottom: 12 }}>💵</div>
+              <div style={{ fontSize: 13, color: "#94a3b8" }}>Valor a receber em mãos</div>
+              <div style={{ fontSize: 36, fontWeight: 700, color: "#f472b6", marginTop: 6 }}>{totalFmt}</div>
+            </div>
+
+            <div style={{ background: "#1a1500", border: "1px solid #d97706", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "#fcd34d", fontWeight: 600, marginBottom: 8 }}>Resumo da venda:</div>
+              <div style={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.8 }}>
+                <div>👤 {nome}</div>
+                <div>📞 {telefone}</div>
+                <div>🎫 {sorted.length} bilhete{sorted.length > 1 ? "s" : ""}: {sorted.join(", ")}</div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setStep("escolha")} style={{ background: "#1e1e2a", border: "1px solid #2d2d3a", borderRadius: 12, padding: "12px 14px", color: "#94a3b8", cursor: "pointer", fontSize: 14, flexShrink: 0 }}>
+                ← Voltar
+              </button>
+              <button onClick={() => finalizar("dinheiro")} disabled={loading} style={{ flex: 1, background: "linear-gradient(135deg,#d97706,#92400e)", border: "none", borderRadius: 12, padding: "12px 16px", color: "white", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? .7 : 1 }}>
+                {loading ? "Confirmando..." : "✓ Confirmar Recebimento"}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
@@ -594,7 +862,7 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
   const sc = (s) => ({ disponivel: "#16a34a", reservado: "#d97706", vendido: "#dc2626" }[s] || "#888");
 
   const [modal, setModal]       = useState(null); // { numeros:[], newStatus }
-  const [mForm, setMForm]       = useState({ nome: "", telefone: "", vendedor: "" });
+  const [mForm, setMForm]       = useState({ nome: "", telefone: "", vendedor: "", forma_pagamento: "pix" });
   const [selNums, setSelNums]   = useState([]);   // numeros selecionados na tabela
   const [saving, setSaving]     = useState(false);
 
@@ -626,9 +894,10 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
     const lista = Array.isArray(numeros) ? numeros : [numeros];
     const primeiro = tickets.find((t) => t.numero === lista[0]);
     setMForm({
-      nome:     primeiro?.nome_cliente || "",
-      telefone: primeiro?.telefone     || "",
-      vendedor: primeiro?.vendedor     || "",
+      nome:            primeiro?.nome_cliente    || "",
+      telefone:        primeiro?.telefone        || "",
+      vendedor:        primeiro?.vendedor        || "",
+      forma_pagamento: primeiro?.forma_pagamento || "pix",
     });
     setModal({ numeros: lista, newStatus });
   };
@@ -654,9 +923,10 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
 
     setSaving(true);
     await onChangeStatus(modal.numeros, modal.newStatus, {
-      nome_cliente: mForm.nome.trim(),
-      telefone:     mForm.telefone.trim(),
-      vendedor:     mForm.vendedor.trim(),
+      nome_cliente:    mForm.nome.trim(),
+      telefone:        mForm.telefone.trim(),
+      vendedor:        mForm.vendedor.trim(),
+      forma_pagamento: modal.newStatus === "vendido" ? mForm.forma_pagamento : null,
     });
     setSaving(false);
     setSelNums([]);
@@ -760,6 +1030,24 @@ function AdminPanel({ stats, tickets, purchases, search, setSearch, filter, setF
                   </div>
                 )}
               </div>
+
+              {/* Forma de pagamento (só quando Vendido) */}
+              {modal.newStatus === "vendido" && (
+                <div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: .8, textTransform: "uppercase", marginBottom: 8 }}>Forma de Pagamento *</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {[["pix", "📲 PIX", "#16a34a", "#0d2a1e"], ["dinheiro", "💵 Dinheiro", "#d97706", "#1a1500"]].map(([val, label, cor, bg]) => (
+                      <button
+                        key={val}
+                        onClick={() => setMForm({ ...mForm, forma_pagamento: val })}
+                        style={{ flex: 1, background: mForm.forma_pagamento === val ? bg : "#1a1a22", border: "2px solid " + (mForm.forma_pagamento === val ? cor : "#2d2d3a"), borderRadius: 10, padding: "10px 8px", color: mForm.forma_pagamento === val ? cor : "#64748b", fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all .15s" }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
