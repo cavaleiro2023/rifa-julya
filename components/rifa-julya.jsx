@@ -297,6 +297,11 @@ export default function RifaJulya() {
         .tag:hover{background:#2d2d3a}
         .progress-track{background:#1e1e2a;border-radius:999px;height:10px;overflow:hidden}
         .progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#ec4899,#f472b6);transition:width .8s ease}
+        .tickets-scroll-wrap{max-height:320px;overflow-y:scroll;border:1px solid #2d2d3a;border-radius:14px;padding:10px;background:#13131a;scrollbar-width:thick;scrollbar-color:#f472b6 #1e1e2a}
+        .tickets-scroll-wrap::-webkit-scrollbar{width:12px}
+        .tickets-scroll-wrap::-webkit-scrollbar-track{background:#1e1e2a;border-radius:999px}
+        .tickets-scroll-wrap::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#ec4899,#be185d);border-radius:999px;border:2px solid #1e1e2a}
+        .tickets-scroll-wrap::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#f472b6,#ec4899)}
         .grid-tickets{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:6px}
         @media(max-width:480px){.grid-tickets{grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:5px}}
         select{background:#1a1a22;border:1.5px solid #2d2d3a;border-radius:10px;color:#f1f5f9;padding:10px 12px;font-size:14px;width:100%;outline:none;font-family:inherit}
@@ -372,28 +377,32 @@ export default function RifaJulya() {
 
         {/* Skeleton loading */}
         {loading ? (
-          <div className="grid-tickets">
-            {Array.from({ length: 60 }).map((_, i) => (
-              <div key={i} className="skeleton" style={{ height: 44 }} />
-            ))}
+          <div className="tickets-scroll-wrap">
+            <div className="grid-tickets">
+              {Array.from({ length: 100 }).map((_, i) => (
+                <div key={i} className="skeleton" style={{ height: 44 }} />
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="grid-tickets">
-            {filteredTickets.map((t) => {
-              const isSel = selected.includes(t.numero);
-              const col   = statusColor(t.status);
-              return (
-                <button
-                  key={t.numero}
-                  className={"ticket-btn" + (isSel ? " selected" : "")}
-                  style={{ background: isSel ? "#f472b6" : col.bg, color: "white", height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
-                  onClick={() => toggleTicket(t.numero)}
-                  title={t.numero + " - " + col.label + (t.nome_cliente ? " - " + t.nome_cliente : "")}
-                >
-                  {String(t.numero).padStart(3, "0")}
-                </button>
-              );
-            })}
+          <div className="tickets-scroll-wrap">
+            <div className="grid-tickets">
+              {filteredTickets.map((t) => {
+                const isSel = selected.includes(t.numero);
+                const col   = statusColor(t.status);
+                return (
+                  <button
+                    key={t.numero}
+                    className={"ticket-btn" + (isSel ? " selected" : "")}
+                    style={{ background: isSel ? "#f472b6" : col.bg, color: "white", height: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onClick={() => toggleTicket(t.numero)}
+                    title={t.numero + " - " + col.label + (t.nome_cliente ? " - " + t.nome_cliente : "")}
+                  >
+                    {String(t.numero).padStart(3, "0")}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
