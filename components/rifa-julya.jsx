@@ -26,24 +26,26 @@ const statusColor = (s) => ({
 
 function buildWhatsAppMsg(nome, telefone, sorted, obs) {
   const totalFmt = "R$ " + (sorted.length * TICKET_PRICE).toFixed(2).replace(".", ",");
-  const qtd = sorted.length + (sorted.length > 1 ? " numeros" : " numero");
+  const qtd = sorted.length + (sorted.length > 1 ? " números" : " número");
   var lines = [];
-  lines.push("RIFA BENEFICENTE - JULYA");
-  lines.push("Ola! Gostaria de reservar o(s) seguinte(s) numero(s) da rifa:");
+  lines.push("🎟️ *RIFA BENEFICENTE - JULYA* 💖");
   lines.push("");
-  lines.push("Nome: " + nome);
-  lines.push("Telefone: " + telefone);
-  lines.push("Numero(s): " + sorted.join(", "));
-  lines.push("Quantidade: " + qtd);
-  lines.push("Valor Total: " + totalFmt);
-  lines.push("Chave PIX para pagamento:");
-  lines.push("julyafigueiredo2512@gmail.com");
-  if (obs) lines.push("Obs: " + obs);
+  lines.push("Olá! 😊 Sua reserva foi registrada com os seguintes dados:");
   lines.push("");
-  lines.push("Aguardo a confirmacao da reserva e os dados para pagamento.");
-  lines.push("Apos realizar o pagamento, por favor envie o comprovante.");
+  lines.push("👤 *Nome:* " + nome);
+  lines.push("📞 *Telefone:* " + telefone);
+  lines.push("🎟️ *Número(s):* " + sorted.join(", "));
+  lines.push("🔢 *Quantidade:* " + qtd);
+  lines.push("💰 *Valor Total:* " + totalFmt);
   lines.push("");
-  lines.push("Desde ja, muito obrigada pela ajuda e colaboracao!");
+  lines.push("📲 *Chave PIX:*");
+  lines.push("`julyafigueiredo2512@gmail.com`");
+  if (obs) lines.push("");
+  if (obs) lines.push("📝 *Obs:* " + obs);
+  lines.push("");
+  lines.push("✅ Após o pagamento, envie o comprovante para confirmarmos sua reserva.");
+  lines.push("");
+  lines.push("Muito obrigada pela sua colaboração! 🙏💖");
   return lines.join("\n");
 }
 
