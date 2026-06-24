@@ -297,7 +297,7 @@ export default function RifaJulya() {
         .tag:hover{background:#2d2d3a}
         .progress-track{background:#1e1e2a;border-radius:999px;height:10px;overflow:hidden}
         .progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#ec4899,#f472b6);transition:width .8s ease}
-        .tickets-scroll-wrap{max-height:900px;overflow-y:scroll;border:1px solid #2d2d3a;border-radius:14px;padding:10px;background:#13131a;scrollbar-width:thick;scrollbar-color:#f472b6 #1e1e2a}
+        .tickets-scroll-wrap{max-height:530px;overflow-y:scroll;border:1px solid #2d2d3a;border-radius:14px;padding:10px;background:#13131a;scrollbar-width:thick;scrollbar-color:#f472b6 #1e1e2a}
         .tickets-scroll-wrap::-webkit-scrollbar{width:12px}
         .tickets-scroll-wrap::-webkit-scrollbar-track{background:#1e1e2a;border-radius:999px}
         .tickets-scroll-wrap::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#ec4899,#be185d);border-radius:999px;border:2px solid #1e1e2a}
